@@ -1,7 +1,7 @@
 from typing import Optional
 
 import torch._dynamo
-from torch._dynamo.comptime import comptime
+from torch._dynamo.exc import UserError, UserErrorType
 from torch.fx.experimental.symbolic_shapes import constrain_range
 
 
@@ -12,15 +12,10 @@ def add_inline_constraint(symbol, min: Optional[int] = None, max: Optional[int] 
     Add min/max constraint on the intermediate symbol at tracing time
     """
 
-    if torch._dynamo.is_compiling():
-        @comptime
-        def _(ctx):
-            node = ctx.get_local("symbol").as_proxy().node
-            min = ctx.get_local("min").as_python_constant()
-            max = ctx.get_local("max").as_python_constant()
-            ctx.graph().call_function(constrain_range, (node,), {"min": min, "max": max})
-    else:
+    try:
         constrain_range(symbol, min=min, max=max)
+    except torch.utils._sympy.value_ranges.ValueRangeError as e:
+        raise UserError(UserErrorType.CONSTRAIN_VIOLATION, e.args[0])
 
     return symbol
 
@@ -32,6 +27,8 @@ def add_inline_size_constraint(symbol, min: int = 2, max: Optional[int] = None):
     # TODO: we should investigate turning off 0/1 specialization for unbacked
     # SymInts
     if min < 2:
-        raise RuntimeError("Unable to set min size to be <= 2"
-                           "because we specialize on 0/1 sizes.")
+        raise UserError(
+            UserErrorType.CONSTRAIN_VIOLATION,
+            "Unable to set min size to be <= 2 because we specialize on 0/1 sizes."
+        )
     return add_inline_constraint(symbol, min, max)

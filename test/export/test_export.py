@@ -81,7 +81,7 @@ class TestExport(TestCase):
         # self.assertEqual(mutated_buffer.sum().item(), 30)
         self.assertEqual(output, mod(*inp))
 
-    @unittest.skipIf(sys.version_info < (3, 11), "Export test for Python 3.11")
+    @unittest.skipIf(sys.version_info >= (3, 11), "Export test for Python 3.11")
     @config.patch(dynamic_shapes=True, capture_dynamic_output_shape_ops=True, specialize_int=True, capture_scalar_outputs=True)
     def test_export_constraints(self):
 
@@ -102,11 +102,29 @@ class TestExport(TestCase):
         res = gm(*inp)
         self.assertTrue(torchdynamo.utils.same(ref, res))
 
-    @unittest.skipIf(sys.version_info < (3, 11), "Export test for Python 3.11")
+    @unittest.skipIf(sys.version_info >= (3, 11), "Export test for Python 3.11")
     @config.patch(dynamic_shapes=True, capture_dynamic_output_shape_ops=True, specialize_int=True, capture_scalar_outputs=True)
     def test_export_constraints_error(self):
+        def invalid_size(x):
+            b = x.item()
+            add_inline_size_constraint(b, min=0, max=5)
+            return torch.full((b, 1), 1)
 
-        def multiple(x):
+        inp = (torch.tensor([3]),)
+        with self.assertRaisesRegex(torchdynamo.exc.UserError, "Unable to set min size"):
+            _ = torchdynamo.export(invalid_size, *inp, aten_graph=True, tracing_mode="symbolic")
+
+        def invalid_input(x):
+            b = x.item()
+            add_inline_size_constraint(b, min=2, max=5)
+            return torch.full((b, 1), 1)
+
+        inp = (torch.tensor([6]),)
+
+        with self.assertRaisesRegex(torchdynamo.exc.UserError, "Invalid value 6 for range"):
+            _ = torchdynamo.export(invalid_input, *inp, aten_graph=True, tracing_mode="symbolic")
+
+        def conflicting_constraints(x):
             b = x.item()
             add_inline_size_constraint(b, min=2, max=3)
             add_inline_size_constraint(b, min=4, max=5)
@@ -114,12 +132,8 @@ class TestExport(TestCase):
 
         inp = (torch.tensor([3]),)
 
-        with self.assertRaisesRegex(AssertionError, "Invalid value ranges"):
-            _ = make_fx(multiple, tracing_mode="symbolic")(*inp)
-
-        # Hits same error as above
-        with self.assertRaisesRegex(torchdynamo.exc.TorchRuntimeError):
-            _ = torchdynamo.export(multiple, *inp, aten_graph=True, tracing_mode="symbolic")
+        with self.assertRaisesRegex(torchdynamo.exc.UserError, "Invalid ranges"):
+            _ = torchdynamo.export(conflicting_constraints, *inp, aten_graph=True, tracing_mode="symbolic")
 
 if __name__ == '__main__':
     run_tests()
