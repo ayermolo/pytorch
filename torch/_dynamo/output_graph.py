@@ -340,7 +340,6 @@ class OutputGraph(fx.Tracer, Checkpointable[OutputGraphState]):
         log.debug("restore_graphstate: removed %s nodes", removed_nodes)
 
     def add_grapharg(self, arg: GraphArg):
-        curr_pos = len(self.graphargs)
         self.graphargs.append(arg)
 
     def count_calls(self):
