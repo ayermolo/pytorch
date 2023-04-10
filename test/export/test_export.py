@@ -1,4 +1,6 @@
 # Owner(s): ["module: dynamo"]
+import sys
+
 from torch.testing._internal.common_utils import run_tests, TestCase
 from functorch.experimental.control_flow import cond
 from torch._export.trace import do_not_use_experimental_export
@@ -79,8 +81,7 @@ class TestExport(TestCase):
         # self.assertEqual(mutated_buffer.sum().item(), 30)
         self.assertEqual(output, mod(*inp))
 
-    @unittest.skip("RuntimeError: Python 3.11+ not yet supported for torch.compile")
-    @unittest.skip("RuntimeError: Windows not yet supported for torch.compile")
+    @unittest.skipIf(sys.version_info < (3, 11), "Export test for Python 3.11")
     @config.patch(dynamic_shapes=True, capture_dynamic_output_shape_ops=True, specialize_int=True, capture_scalar_outputs=True)
     def test_export_constraints(self):
 
@@ -101,8 +102,7 @@ class TestExport(TestCase):
         res = gm(*inp)
         self.assertTrue(torchdynamo.utils.same(ref, res))
 
-    @unittest.skip("RuntimeError: Python 3.11+ not yet supported for torch.compile")
-    @unittest.skip("RuntimeError: Windows not yet supported for torch.compile")
+    @unittest.skipIf(sys.version_info < (3, 11), "Export test for Python 3.11")
     @config.patch(dynamic_shapes=True, capture_dynamic_output_shape_ops=True, specialize_int=True, capture_scalar_outputs=True)
     def test_export_constraints_error(self):
 
@@ -114,11 +114,11 @@ class TestExport(TestCase):
 
         inp = (torch.tensor([3]),)
 
-        with self.assertRaises(torchdynamo.exc.TorchRuntimeError):
-            _ = torchdynamo.export(multiple, *inp, aten_graph=True, tracing_mode="symbolic")
-
-        with self.assertRaises(AssertionError):
+        with self.assertRaisesRegex(AssertionError, "Invalid value ranges"):
             _ = make_fx(multiple, tracing_mode="symbolic")(*inp)
+
+        with self.assertRaisesRegex(torchdynamo.exc.TorchRuntimeError):
+            _ = torchdynamo.export(multiple, *inp, aten_graph=True, tracing_mode="symbolic")
 
 if __name__ == '__main__':
     run_tests()
