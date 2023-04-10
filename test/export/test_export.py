@@ -84,21 +84,12 @@ class TestExport(TestCase):
     @config.patch(dynamic_shapes=True, capture_dynamic_output_shape_ops=True, specialize_int=True, capture_scalar_outputs=True)
     def test_export_constraints(self):
 
-        def f(roi_batch_splits_nms):
-            roi_batch_ids = []
-            for i, x in enumerate(roi_batch_splits_nms.to(torch.int32)):
-                b = x.item()
+        def f(x):
+            b = x.item()
+            add_inline_size_constraint(b, min=2, max=5)
+            return torch.full((b, 1), 1)
 
-                add_inline_size_constraint(b, min=2, max=5)
-
-                roi_batch_ids.append(torch.full((b, 1), i))
-
-            roi_batch_ids = torch.cat(roi_batch_ids, dim=0)
-
-            roi_batch_ids = roi_batch_ids.view(-1)
-            return roi_batch_ids
-
-        inp = (torch.tensor([3, 2]),)
+        inp = (torch.tensor([3]),)
         ref = f(*inp)
 
         gm, _ = torchdynamo.export(f, *inp, aten_graph=True, tracing_mode="symbolic")
@@ -109,6 +100,25 @@ class TestExport(TestCase):
         gm = make_fx(f, tracing_mode="symbolic")(*inp)
         res = gm(*inp)
         self.assertTrue(torchdynamo.utils.same(ref, res))
+
+    @unittest.skip("RuntimeError: Python 3.11+ not yet supported for torch.compile")
+    @unittest.skip("RuntimeError: Windows not yet supported for torch.compile")
+    @config.patch(dynamic_shapes=True, capture_dynamic_output_shape_ops=True, specialize_int=True, capture_scalar_outputs=True)
+    def test_export_constraints_error(self):
+
+        def multiple(x):
+            b = x.item()
+            add_inline_size_constraint(b, min=2, max=3)
+            add_inline_size_constraint(b, min=4, max=5)
+            return torch.full((b, 1), 1)
+
+        inp = (torch.tensor([3]),)
+
+        with self.assertRaises(torchdynamo.exc.TorchRuntimeError):
+            _ = torchdynamo.export(multiple, *inp, aten_graph=True, tracing_mode="symbolic")
+
+        with self.assertRaises(AssertionError):
+            _ = make_fx(multiple, tracing_mode="symbolic")(*inp)
 
 if __name__ == '__main__':
     run_tests()
