@@ -1166,7 +1166,13 @@ def get_fake_value(node, tx):
     """
     Run the computation represented by `node` using fake tensors and return the result.
     """
-    from .exc import TorchRuntimeError, unimplemented, Unsupported
+    from .exc import (
+        TorchRuntimeError,
+        unimplemented,
+        Unsupported,
+        UserError,
+        UserErrorType,
+    )
 
     op = node.op
 
@@ -1227,6 +1233,8 @@ def get_fake_value(node, tx):
             cause, torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode
         ):
             unimplemented("guard on data-dependent symbolic int/float")
+        elif isinstance(cause, torch.utils._sympy.value_ranges.ValueRangeError):
+            raise UserError(UserErrorType.CONSTRAIN_VIOLATION, e.args[0]) from e
         raise TorchRuntimeError() from e
 
 
@@ -1245,8 +1253,6 @@ def run_node(output_graph, node, args, kwargs, nnmodule):
     Nodes that are not call_function, call_method, call_module, or get_attr will
     raise an AssertionError.
     """
-    from .exc import UserError
-
     op = node.op
     try:
         if op == "call_function":
@@ -1261,8 +1267,6 @@ def run_node(output_graph, node, args, kwargs, nnmodule):
         elif op == "placeholder":
             assert "example_value" in node.meta
             return node.meta["example_value"]
-    except UserError as e:
-        raise e
     except Exception as e:
         raise RuntimeError(
             f"Failed running {op} {node.target}(*{args}, **{kwargs}):\n{e}\n(scroll up for backtrace)"

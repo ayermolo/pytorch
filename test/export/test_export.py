@@ -121,7 +121,7 @@ class TestExport(TestCase):
 
         inp = (torch.tensor([6]),)
 
-        with self.assertRaisesRegex(torchdynamo.exc.UserError, "Invalid value 6 for range"):
+        with self.assertRaisesRegex(torch.utils._sympy.value_ranges.ValueRangeError, "Invalid value 6 for range"):
             _ = torchdynamo.export(invalid_input, *inp, aten_graph=True, tracing_mode="symbolic")
 
         def conflicting_constraints(x):
