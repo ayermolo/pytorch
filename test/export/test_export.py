@@ -117,6 +117,7 @@ class TestExport(TestCase):
         with self.assertRaisesRegex(AssertionError, "Invalid value ranges"):
             _ = make_fx(multiple, tracing_mode="symbolic")(*inp)
 
+        # Hits same error as above
         with self.assertRaisesRegex(torchdynamo.exc.TorchRuntimeError):
             _ = torchdynamo.export(multiple, *inp, aten_graph=True, tracing_mode="symbolic")
 
