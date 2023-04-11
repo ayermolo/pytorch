@@ -6,14 +6,14 @@ import os
 import random
 import sys
 import unittest
-from typing import Optional
+from typing import Mapping, Optional, Type
 
 import numpy as np
 import packaging.version
 
 import torch
 from torch.autograd import function
-from torch.onnx._internal import diagnostics
+from torch.onnx._internal import diagnostics, exporter
 from torch.testing._internal import common_utils
 
 pytorch_test_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -27,6 +27,14 @@ RNN_BATCH_SIZE = 7
 RNN_SEQUENCE_LENGTH = 11
 RNN_INPUT_SIZE = 5
 RNN_HIDDEN_SIZE = 3
+
+try:
+    from torchvision import models as torchvision_models  # noqa: F401
+
+    HAS_TORCHVISION = True
+except ImportError:
+    HAS_TORCHVISION = False
+skip_if_no_torchvision = unittest.skipIf(not HAS_TORCHVISION, "no torchvision")
 
 
 def _skipper(condition, reason):
@@ -194,6 +202,38 @@ def skip_dynamic_fx_test(reason: str):
                 raise unittest.SkipTest(
                     f"Skip verify dynamic shapes test for FX. {reason}"
                 )
+
+        return wrapper
+
+    return skip_dec
+
+
+def skip_fx_exporters(
+    exporter_cls_and_reason: Mapping[Optional[Type[exporter.Exporter]], str]
+):
+    """Skip exporting test for selected FX exporters.
+
+    Args:
+        exporter_cls_and_reason: Mapping from FX exporter class to skip the test to the
+            reason for skipping.
+
+    Returns:
+        A decorator for skipping exporting test for FX exporters.
+    """
+
+    def skip_dec(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            for exporter_cls, reason in exporter_cls_and_reason.items():
+                if exporter_cls == self.exporter_cls:
+                    exporter_name = (
+                        exporter_cls.__name__
+                        if exporter_cls is not None
+                        else "dynamo_export"
+                    )
+                    raise unittest.SkipTest(
+                        f"Skip verify test for '{exporter_name}'. {reason}"
+                    )
 
         return wrapper
 
